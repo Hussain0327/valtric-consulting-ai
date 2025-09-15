@@ -23,6 +23,9 @@ from rag_system.retriever import hybrid_retriever
 from rag_system.supabase_client import supabase_manager
 from agent_logic.model_router import model_router
 from agent_logic.conversation_manager import conversation_manager
+from agent_logic.data_generator import data_generator
+from services.export_service import export_service
+from services.queue_service import queue_service
 from api.dependencies import get_current_user, get_project_id
 from models.schemas import ChatMessage, ChatResponse, StreamingChatResponse
 
@@ -92,6 +95,36 @@ async def chat_message(
             framework=request.framework
         )
         
+        # Process AI response for structured data
+        data_result = data_generator.process_ai_response(response["content"])
+        
+        # Queue export generation if structured data is available
+        export_urls = {}
+        if data_result['exportable'] and data_result['structured_data']:
+            try:
+                # Queue export generation instead of blocking
+                export_job = await queue_service.enqueue_export_job(
+                    session_id=session_id,
+                    structured_data=data_result['structured_data'],
+                    export_types=['excel', 'pdf', 'powerpoint']
+                )
+                
+                # Return status URLs instead of direct download URLs
+                export_urls = {
+                    'status': export_job['status'],
+                    'job_id': export_job['job_id'],
+                    'status_url': export_job.get('status_url'),
+                    'message': 'Export generation queued - check status URL for progress'
+                }
+                
+                logger.info(f"Queued exports for session {session_id}: job {export_job['job_id']}")
+            except Exception as e:
+                logger.error(f"Export queueing failed: {e}")
+                export_urls = {
+                    'status': 'failed',
+                    'message': 'Failed to queue export generation'
+                }
+        
         # Save conversation turn
         background_tasks.add_task(
             conversation_manager.add_message,
@@ -103,7 +136,9 @@ async def chat_message(
                 "framework": request.framework,
                 "context_sources": len(retrieval_context.results),
                 "model_used": response.get("model"),
-                "tokens_used": response.get("usage", {})
+                "tokens_used": response.get("usage", {}),
+                "data_type": data_result['data_type'],
+                "exportable": data_result['exportable']
             }
         )
         
@@ -118,6 +153,12 @@ async def chat_message(
                 "usage": response.get("usage", {}),
                 "context_quality": retrieval_context.metadata
             },
+            # New structured data fields
+            data_type=data_result['data_type'],
+            structured_data=data_result['structured_data'],
+            chart_config=data_result['chart_config'],
+            export_urls=export_urls if export_urls else None,
+            has_attachments=bool(export_urls),
             timestamp=datetime.utcnow()
         )
         
@@ -380,3 +421,21 @@ async def delete_chat_session(
     except Exception as e:
         logger.error(f"Failed to delete session: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete session")
+
+# =============================================================================
+# Export Status Endpoints
+# =============================================================================
+
+@router.get("/export/status/{job_id}")
+async def get_export_status(
+    job_id: str,
+    user = Depends(get_current_user)
+):
+    """Get the status of an export job"""
+    try:
+        status = await queue_service.get_export_status(job_id)
+        return status
+        
+    except Exception as e:
+        logger.error(f"Failed to get export status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get export status")

@@ -73,7 +73,7 @@ class RetrievalSource(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class ChatResponse(BaseModel):
-    """Complete chat response"""
+    """Complete chat response with structured data support"""
     session_id: str
     message: str
     persona: ConsultantPersona
@@ -81,6 +81,12 @@ class ChatResponse(BaseModel):
     sources: List[RetrievalSource] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    # New fields for structured data
+    data_type: Optional[str] = "text"
+    structured_data: Optional[Dict[str, Any]] = None
+    chart_config: Optional[Dict[str, Any]] = None
+    export_urls: Optional[Dict[str, str]] = None  # {"excel": url, "pdf": url, "ppt": url}
+    has_attachments: bool = False
     
     class Config:
         json_encoders = {

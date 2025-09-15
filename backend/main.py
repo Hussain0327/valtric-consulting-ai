@@ -16,7 +16,7 @@ import uvicorn
 
 from config.settings import settings
 from rag_system.supabase_client import supabase_manager
-from api.routes import chat, sessions, frameworks, analysis, feedback, health, monitoring
+from api.routes import chat, sessions, frameworks, analysis, feedback, health, monitoring, exports
 from api.middleware.error_handling import ErrorHandlingMiddleware
 from api.middleware.rate_limiting import RateLimitingMiddleware
 from api.middleware.auth import AuthMiddleware
@@ -41,6 +41,11 @@ async def lifespan(app: FastAPI):
     
     if not any(health_status.values()):
         logger.error("No RAG systems are available!")
+    
+    # Start background queue workers
+    from services.queue_service import start_queue_workers
+    await start_queue_workers()
+    logger.info("Background queue workers started")
     
     yield
     
@@ -74,7 +79,7 @@ app = FastAPI(
 # CORS - Configure for your frontend domain
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://*.vercel.app"],  # Add your frontend URLs
+    allow_origins=["*"],  # Allow all origins for testing
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -100,6 +105,11 @@ app.include_router(sessions.router, prefix="/api/v1", tags=["Sessions"])
 app.include_router(frameworks.router, prefix="/api/v1", tags=["Frameworks"])
 app.include_router(analysis.router, prefix="/api/v1", tags=["Analysis"])
 app.include_router(feedback.router, prefix="/api/v1", tags=["Feedback"])
+app.include_router(exports.router, prefix="/api/v1/export", tags=["Export"])
+
+# TEST ENDPOINT - NO AUTH REQUIRED
+from test_chat_endpoint import test_router
+app.include_router(test_router, prefix="/api/v1", tags=["Test"])
 
 # =============================================================================
 # Root Endpoints

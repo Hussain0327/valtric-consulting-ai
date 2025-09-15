@@ -37,7 +37,7 @@ class SupabaseClientManager:
             config = get_global_supabase_config()
             self._global_client = create_client(
                 config["url"], 
-                config["key"],
+                config["service_role_key"],
                 options=ClientOptions(
                     auto_refresh_token=False,
                     persist_session=False
@@ -103,9 +103,18 @@ class SupabaseClientManager:
         """Search Global RAG for consulting frameworks using documents table"""
         try:
             # Use admin client for Global RAG (read-only, no user context needed)
+            # For SWOT queries, search for SWOT keyword
+            search_term = query_text.lower() if query_text else 'consulting framework'
+            if 'swot' in search_term:
+                search_term = 'SWOT'
+            elif 'porter' in search_term or 'five forces' in search_term:
+                search_term = 'Porter'
+            elif 'mckinsey' in search_term or '7s' in search_term:
+                search_term = 'McKinsey'
+            
             # Search documents table with text matching
-            result = self.global_admin_client.table("documents").select("*").ilike(
-                "content", f"%{query_text if query_text else 'consulting framework'}%"
+            result = self.global_client.table("documents").select("*").ilike(
+                "content", f"%{search_term}%"
             ).limit(k).execute()
             
             documents = result.data or []

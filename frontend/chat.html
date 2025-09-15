@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ValtricAI Chat Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            height: 600px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f7f8fa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .message-meta {
+            font-size: 11px;
+            margin-top: 5px;
+            opacity: 0.7;
+        }
+
+        .input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-field {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .input-field:focus {
+            border-color: #667eea;
+        }
+
+        .send-button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .send-button:hover {
+            transform: scale(1.05);
+        }
+
+        .send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 20px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .typing-indicator.active {
+            display: block;
+        }
+
+        .error-message {
+            background: #fee;
+            color: #c00;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px;
+            display: none;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+
+        .connection-status {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            background: rgba(255,255,255,0.2);
+        }
+
+        .connection-status.connected {
+            color: #4caf50;
+        }
+
+        .connection-status.disconnected {
+            color: #f44336;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0,0,0,.1);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Model info badge */
+        .model-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #e8f4f8;
+            color: #0084ff;
+            border-radius: 10px;
+            font-size: 10px;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="connection-status disconnected" id="connectionStatus">● Disconnected</div>
+            <h1>🤖 ValtricAI Chat</h1>
+            <p>Test your AI consulting assistant</p>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="message assistant">
+                <div class="message-content">
+                    👋 Hello! I'm your AI consultant. Ask me anything about business strategy, SWOT analysis, or market competition!
+                    <div class="message-meta">ValtricAI Assistant</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="typing-indicator" id="typingIndicator">
+            <div class="spinner"></div> AI is thinking...
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <div class="input-container">
+            <input 
+                type="text" 
+                class="input-field" 
+                id="messageInput" 
+                placeholder="Type your message..."
+                autocomplete="off"
+            />
+            <button class="send-button" id="sendButton">Send</button>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_URL = 'http://localhost:8000';
+        const SESSION_ID = generateSessionId();
+        
+        // Fixed conversation persistence
+        let sending = false;
+        const CONVERSATION_KEY = 'valtric.conversationId';
+        
+        // Get or generate conversation ID
+        let conversationId = localStorage.getItem(CONVERSATION_KEY);
+        if (!conversationId) {
+            conversationId = crypto.randomUUID();
+            localStorage.setItem(CONVERSATION_KEY, conversationId);
+        }
+        
+        // DOM elements
+        const chatContainer = document.getElementById('chatContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const errorMessage = document.getElementById('errorMessage');
+        const connectionStatus = document.getElementById('connectionStatus');
+
+        // Generate random session ID
+        function generateSessionId() {
+            return 'session-' + Math.random().toString(36).substr(2, 9);
+        }
+        
+        // Add memory preview
+        function updateMemoryPreview() {
+            const preview = document.getElementById('memory-preview') || createMemoryPreview();
+            preview.textContent = `Session: ${conversationId.slice(0, 8)}...`;
+        }
+        
+        function createMemoryPreview() {
+            const preview = document.createElement('div');
+            preview.id = 'memory-preview';
+            preview.style.cssText = 'font-size: 12px; color: #6b7280; margin-bottom: 10px; text-align: center; opacity: 0.7;';
+            chatContainer.parentNode.insertBefore(preview, chatContainer);
+            return preview;
+        }
+
+        // Check backend connection
+        async function checkConnection() {
+            try {
+                const response = await fetch(`${API_URL}/api/v1/health`);
+                if (response.ok) {
+                    connectionStatus.textContent = '● Connected';
+                    connectionStatus.className = 'connection-status connected';
+                    return true;
+                }
+            } catch (error) {
+                connectionStatus.textContent = '● Disconnected';
+                connectionStatus.className = 'connection-status disconnected';
+                showError('Cannot connect to backend. Make sure the server is running on port 8000.');
+                return false;
+            }
+        }
+
+        // Show error message
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.className = 'error-message active';
+            setTimeout(() => {
+                errorMessage.className = 'error-message';
+            }, 5000);
+        }
+
+        // Fixed add message with proper badge separation
+        function addMessage(content, isUser = false, metadata = {}) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+            
+            const messageContent = document.createElement('div');
+            messageContent.className = 'message-content';
+            
+            // Create content div (pure text - NO model tag leakage)
+            const contentDiv = document.createElement('div');
+            contentDiv.textContent = content;  // Pure text only
+            messageContent.appendChild(contentDiv);
+            
+            // Create meta info with model badge separate from content
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'message-meta';
+            metaDiv.innerHTML = `${isUser ? 'You' : 'ValtricAI'} • ${new Date().toLocaleTimeString()}`;
+            
+            // Add model badge separate from content
+            if (!isUser && metadata.model) {
+                const badge = document.createElement('span');
+                badge.className = 'model-badge';
+                badge.textContent = metadata.model;
+                badge.style.cssText = 'font-size: 10px; background: #e5e7eb; padding: 2px 6px; border-radius: 3px; margin-left: 8px; opacity: 0.7;';
+                metaDiv.appendChild(badge);
+            }
+            
+            messageContent.appendChild(metaDiv);
+            messageDiv.appendChild(messageContent);
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Fixed send message with double-send prevention
+        async function sendMessage() {
+            // Prevent double sends
+            if (sending) return;
+            
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            sending = true;
+
+            // Add user message (role enforcement - only user messages from UI)
+            addMessage(message, true);
+            messageInput.value = '';
+            
+            // Show typing indicator
+            typingIndicator.className = 'typing-indicator active';
+            sendButton.disabled = true;
+
+            try {
+                const response = await fetch(`${API_URL}/api/v1/test-chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        conversation_id: conversationId,  // Fixed: use conversation_id
+                        session_id: SESSION_ID,           // Keep for compatibility
+                        persona: 'partner'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                // Add AI response with model badge (NO model leakage in content)
+                addMessage(data.message || 'No response', false, {
+                    model: data.model_used || 'AI',
+                    complexity: data.complexity_score,
+                    signals: data.routing_signals
+                });
+
+                // Log routing info
+                console.log(`🧠 Model: ${data.model_used}, Complexity: ${data.complexity_score?.toFixed(2)}, Signals: ${data.routing_signals?.join(', ')}`);
+
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Failed to get response. Check console for details.');
+                addMessage('Sorry, I encountered an error. Please try again.', false);
+            } finally {
+                typingIndicator.className = 'typing-indicator';
+                sendButton.disabled = false;
+                sending = false;
+            }
+        }
+
+        // Event listeners
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Initialize with memory preview
+        window.addEventListener('load', async () => {
+            const connected = await checkConnection();
+            if (connected) {
+                messageInput.focus();
+                updateMemoryPreview();  // Show session info
+            }
+        });
+
+        // Check connection every 5 seconds
+        setInterval(checkConnection, 5000);
+    </script>
+</body>
+</html>
