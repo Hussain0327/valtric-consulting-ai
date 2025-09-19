@@ -24,10 +24,9 @@ from rag_system.supabase_client import supabase_manager
 from agent_logic.model_router import model_router
 from agent_logic.conversation_manager import conversation_manager
 from agent_logic.data_generator import data_generator
-from services.export_service import export_service
 from services.queue_service import queue_service
 from api.dependencies import get_current_user, get_project_id
-from models.schemas import ChatMessage, ChatResponse, StreamingChatResponse
+from models.schemas import ChatMessage, ChatResponse, StreamingChatResponse, RetrievalSource
 
 logger = logging.getLogger(__name__)
 
@@ -87,16 +86,31 @@ async def chat_message(
         )
         
         # Generate AI response
-        response = await model_router.generate_response(
+        model_response = await model_router.generate_response(
             message=request.message,
             persona=request.persona,
             context=retrieval_context.context_text,
             conversation_history=conversation.get_recent_messages(),
             framework=request.framework
         )
-        
+
         # Process AI response for structured data
-        data_result = data_generator.process_ai_response(response["content"])
+        data_result = data_generator.process_ai_response(model_response.content)
+
+        # Map retrieval results to response schema
+        top_sources: List[RetrievalSource] = []
+        for result in retrieval_context.results[:5]:
+            snippet = result.text[:200] + "..." if len(result.text) > 200 else result.text
+            top_sources.append(
+                RetrievalSource(
+                    id=result.id or "unknown",
+                    text=snippet,
+                    similarity_score=result.similarity_score,
+                    source_type=result.source_type,
+                    source_label=result.source_label,
+                    metadata=result.metadata
+                )
+            )
         
         # Queue export generation if structured data is available
         export_urls = {}
@@ -130,27 +144,27 @@ async def chat_message(
             conversation_manager.add_message,
             session_id=session_id,
             user_message=request.message,
-            ai_response=response["content"],
+            ai_response=model_response.content,
             metadata={
                 "persona": request.persona,
                 "framework": request.framework,
                 "context_sources": len(retrieval_context.results),
-                "model_used": response.get("model"),
-                "tokens_used": response.get("usage", {}),
+                "model_used": model_response.model_used,
+                "tokens_used": model_response.usage,
                 "data_type": data_result['data_type'],
                 "exportable": data_result['exportable']
             }
         )
-        
+
         return ChatResponse(
             session_id=session_id,
-            message=response["content"],
+            message=model_response.content,
             persona=request.persona,
             framework=request.framework,
-            sources=retrieval_context.results[:5],  # Return top 5 sources
+            sources=top_sources,
             metadata={
-                "model": response.get("model"),
-                "usage": response.get("usage", {}),
+                "model": model_response.model_used,
+                "usage": model_response.usage,
                 "context_quality": retrieval_context.metadata
             },
             # New structured data fields

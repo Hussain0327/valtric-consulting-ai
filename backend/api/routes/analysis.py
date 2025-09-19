@@ -120,23 +120,20 @@ Focus on practical, implementable insights that provide genuine strategic value.
         # Generate AI analysis
         tracer.start_generation()
         try:
-            ai_response = await model_router.generate_response(
-                messages=[{"role": "user", "content": analysis_prompt}],
-                persona=ConsultantPersona.SENIOR_PARTNER,  # Use senior partner for strategic analysis
-                project_id=project_id,
-                user_id=user.get("id"),
-                session_id=f"swot_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
-                framework=ConsultingFramework.SWOT
+            model_response = await model_router.generate_response(
+                message=analysis_prompt,
+                persona=ConsultantPersona.SENIOR_PARTNER.value,
+                context=context_text,
+                framework=ConsultingFramework.SWOT.value,
+                user_id=user.get("id")
             )
-            
-            # Extract token counts and model from AI response
-            tokens_in = ai_response.get("usage", {}).get("prompt_tokens", 0)
-            tokens_out = ai_response.get("usage", {}).get("completion_tokens", 0)
-            model_used = ai_response.get("model", "gpt-4")
-            
-            tracer.end_generation(tokens_in, tokens_out, model_used)
-            
-            ai_content = ai_response.get("content", "")
+
+            usage = model_response.usage or {}
+            tokens_in = usage.get("prompt_tokens", usage.get("input_tokens", 0))
+            tokens_out = usage.get("completion_tokens", usage.get("output_tokens", 0))
+            tracer.end_generation(tokens_in, tokens_out, model_response.model_used)
+
+            ai_content = model_response.content
             
         except Exception as e:
             tracer.set_error(f"AI generation failed: {str(e)}")
@@ -174,13 +171,14 @@ Focus on practical, implementable insights that provide genuine strategic value.
         sources_used = []
         if retrieval_result and retrieval_result.results:
             for result in retrieval_result.results[:5]:  # Limit to top 5 sources
+                snippet = result.text[:200] + "..." if len(result.text) > 200 else result.text
                 source = RetrievalSource(
-                    id=result.get("id", "unknown"),
-                    text=result.get("text", "")[:200] + "..." if len(result.get("text", "")) > 200 else result.get("text", ""),
-                    similarity_score=result.get("similarity", 0.0),
-                    source_type=result.get("source_type", "unknown"),
-                    source_label=result.get("source_label", "[Framework]"),
-                    metadata=result.get("metadata", {})
+                    id=result.id or "unknown",
+                    text=snippet,
+                    similarity_score=result.similarity_score,
+                    source_type=result.source_type,
+                    source_label=result.source_label,
+                    metadata=result.metadata
                 )
                 sources_used.append(source)
         
@@ -327,23 +325,20 @@ Focus on industry-specific factors and provide practical strategic insights for 
         # Generate AI analysis
         tracer.start_generation()
         try:
-            ai_response = await model_router.generate_response(
-                messages=[{"role": "user", "content": analysis_prompt}],
-                persona=ConsultantPersona.SENIOR_PARTNER,  # Use senior partner for strategic analysis
-                project_id=project_id,
-                user_id=user.get("id"),
-                session_id=f"porters_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
-                framework=ConsultingFramework.PORTERS
+            model_response = await model_router.generate_response(
+                message=analysis_prompt,
+                persona=ConsultantPersona.SENIOR_PARTNER.value,
+                context=context_text,
+                framework=ConsultingFramework.PORTERS.value,
+                user_id=user.get("id")
             )
-            
-            # Extract token counts and model from AI response
-            tokens_in = ai_response.get("usage", {}).get("prompt_tokens", 0)
-            tokens_out = ai_response.get("usage", {}).get("completion_tokens", 0)
-            model_used = ai_response.get("model", "gpt-4")
-            
-            tracer.end_generation(tokens_in, tokens_out, model_used)
-            
-            ai_content = ai_response.get("content", "")
+
+            usage = model_response.usage or {}
+            tokens_in = usage.get("prompt_tokens", usage.get("input_tokens", 0))
+            tokens_out = usage.get("completion_tokens", usage.get("output_tokens", 0))
+            tracer.end_generation(tokens_in, tokens_out, model_response.model_used)
+
+            ai_content = model_response.content
             
         except Exception as e:
             tracer.set_error(f"AI generation failed: {str(e)}")

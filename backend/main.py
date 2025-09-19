@@ -7,6 +7,7 @@ Enterprise-grade consulting AI with dual RAG architecture:
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -108,8 +109,10 @@ app.include_router(feedback.router, prefix="/api/v1", tags=["Feedback"])
 app.include_router(exports.router, prefix="/api/v1/export", tags=["Export"])
 
 # TEST ENDPOINT - NO AUTH REQUIRED
-from test_chat_endpoint import test_router
-app.include_router(test_router, prefix="/api/v1", tags=["Test"])
+if os.getenv("ENABLE_TEST_CHAT", "false").lower() == "true":
+    from test_chat_endpoint import test_router
+
+    app.include_router(test_router, prefix="/api/v1", tags=["Test"])
 
 # =============================================================================
 # Root Endpoints
