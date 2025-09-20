@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: valtricai-backend
+    env: docker
+    plan: free
+    dockerfilePath: Dockerfile
+    autoDeploy: true
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: ENABLE_TEST_CHAT
+        value: "true"
+      # Required environment variables (set these in Render Dashboard)
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GLOBAL_SUPABASE_URL
+        sync: false
+      - key: GLOBAL_SUPABASE_ANON_KEY
+        sync: false
+      - key: GLOBAL_SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: TENANT_SUPABASE_URL
+        sync: false
+      - key: TENANT_SUPABASE_ANON_KEY
+        sync: false
+      - key: TENANT_SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: TENANT_SUPABASE_JWT_SECRET
+        sync: false
+      # Optional Redis (enable if available)
+      - key: REDIS_URL
+        sync: false
+

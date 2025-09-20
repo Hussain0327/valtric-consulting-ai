@@ -9,6 +9,18 @@ from typing import Optional
 from pydantic import validator
 from pydantic_settings import BaseSettings
 
+# Load environment variables from common locations early, so BaseSettings sees them.
+try:
+    from dotenv import load_dotenv
+
+    # Load from repo root .env if present
+    load_dotenv(".env", override=False)
+    # Load from backend/.env if present (your keys are stored here locally)
+    load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=False)
+except Exception:
+    # dotenv is optional in production where platform env vars are used
+    pass
+
 
 class RAGMode(str, Enum):
     """RAG operation modes"""
@@ -58,6 +70,7 @@ class Settings(BaseSettings):
     fusion_k: int = 10  # Results to return after fusion
     
     class Config:
+        # Keep default to ".env" for local usage; dotenv preloader above covers backend/.env
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False

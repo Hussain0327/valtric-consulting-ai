@@ -1,5 +1,8 @@
 """
 Model router for intelligent selection between gpt-5-mini and o4-mini
+
+OFFLINE_MODE support:
+- When env OFFLINE_MODE=true, returns simulated responses without calling OpenAI.
 """
 
 import logging
@@ -8,6 +11,7 @@ from typing import Dict, Any, List, Optional, AsyncIterator, Union
 from enum import Enum
 from dataclasses import dataclass
 import re
+import os
 
 from config.settings import get_openai_config, RAGMode
 from models.schemas import ConsultantPersona, ConsultingFramework
@@ -328,7 +332,15 @@ Format your response as a concise text."""
         input_context: Union[str, List[Dict[str, Any]]]
     ) -> Dict[str, Any]:
         """Call gpt-5-mini for simple queries using Response API"""
-        
+        if os.getenv("OFFLINE_MODE", "false").lower() == "true":
+            text = ""
+            if isinstance(input_context, list) and input_context:
+                text = input_context[-1].get("content", "")
+            return {
+                "content": f"[OFFLINE] Quick advisory for: {text[:120]}",
+                "usage": {"input_tokens": 200, "output_tokens": 50},
+                "sources_used": []
+            }
         try:
             response = self.client.responses.create(
                 model=model,
@@ -356,7 +368,20 @@ Format your response as a concise text."""
         complexity_score: float
     ) -> Dict[str, Any]:
         """Call o4-mini for complex reasoning using Response API"""
-        
+        if os.getenv("OFFLINE_MODE", "false").lower() == "true":
+            text = ""
+            if isinstance(input_context, list) and input_context:
+                text = input_context[-1].get("content", "")
+            # Provide a small structured snippet to exercise data parsing/export paths
+            swot_json = (
+                '{"strengths":["Brand"],"weaknesses":["Cost"],"opportunities":["Market"],"threats":["Competition"]}'
+            )
+            return {
+                "content": f"[OFFLINE o4-mini] High-level plan for: {text[:120]}\n\n{swot_json}",
+                "usage": {"input_tokens": 600, "output_tokens": 300},
+                "reasoning_summary": "Simulated multi-step reasoning.",
+                "sources_used": []
+            }
         try:
             # Determine reasoning effort based on complexity
             effort = "low" if complexity_score < 0.7 else "medium" if complexity_score < 0.85 else "high"
@@ -402,7 +427,11 @@ Format your response as a concise text."""
         rag_context: Optional[str] = None
     ) -> AsyncIterator[Dict[str, Any]]:
         """Stream AI response using Response API streaming"""
-        
+        if os.getenv("OFFLINE_MODE", "false").lower() == "true":
+            # Simulated two-chunk stream
+            yield {"content": "[OFFLINE] Thinking… ", "model": "gpt-5-mini", "type": "content"}
+            yield {"content": "done.", "model": "gpt-5-mini", "type": "content"}
+            return
         try:
             # Convert inputs and determine model
             persona_enum = ConsultantPersona(persona) if isinstance(persona, str) else persona

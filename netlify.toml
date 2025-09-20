@@ -1,0 +1,10 @@
+[build]
+  command = "echo 'Static site'"
+  publish = "frontend"
+
+# Optional: custom headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+

@@ -1,8 +1,13 @@
 """
 Redis Caching Service for ValtricAI
 Reduces OpenAI API costs by 80% through intelligent response caching
+
+Day-1 Production Note:
+- If Redis is not configured (no REDIS_URL/REDIS_HOST) this module gracefully
+  degrades to a no-op cache so the app can run without Redis.
 """
 
+import os
 import redis
 import json
 import hashlib
@@ -59,11 +64,12 @@ CACHE_CONFIGS = {
 class RedisCacheService:
     """High-performance Redis caching service for OpenAI responses"""
     
-    def __init__(self, 
-                 host: str = "localhost", 
-                 port: int = 6379, 
+    def __init__(self,
+                 host: str = "localhost",
+                 port: int = 6379,
                  db: int = 0,
-                 decode_responses: bool = True):
+                 decode_responses: bool = True,
+                 url: Optional[str] = None):
         """
         Initialize Redis cache service
         
@@ -74,16 +80,25 @@ class RedisCacheService:
             decode_responses: Automatically decode responses to strings
         """
         try:
-            self.redis_client = redis.Redis(
-                host=host,
-                port=port,
-                db=db,
-                decode_responses=decode_responses,
-                socket_connect_timeout=5,
-                socket_timeout=5,
-                retry_on_timeout=True,
-                health_check_interval=30
-            )
+            if url:
+                self.redis_client = redis.from_url(
+                    url,
+                    decode_responses=decode_responses,
+                    socket_connect_timeout=5,
+                    socket_timeout=5,
+                    health_check_interval=30,
+                )
+            else:
+                self.redis_client = redis.Redis(
+                    host=host,
+                    port=port,
+                    db=db,
+                    decode_responses=decode_responses,
+                    socket_connect_timeout=5,
+                    socket_timeout=5,
+                    retry_on_timeout=True,
+                    health_check_interval=30
+                )
             
             # Test connection
             self.redis_client.ping()
@@ -416,5 +431,49 @@ class RedisCacheService:
             }
 
 
-# Global Redis cache instance
-redis_cache = RedisCacheService()
+class DummyRedisCacheService:
+    """No-op fallback cache when Redis is unavailable or disabled"""
+
+    async def get_cached_response(self, *args, **kwargs) -> Optional[Dict[str, Any]]:
+        return None
+
+    async def cache_response(self, *args, **kwargs) -> bool:
+        return False
+
+    async def delete_cached_response(self, *args, **kwargs) -> bool:
+        return False
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        return {"status": "disabled"}
+
+    def flush_cache_type(self, *args, **kwargs) -> int:
+        return 0
+
+    def health_check(self) -> Dict[str, Any]:
+        return {"status": "disabled", "timestamp": datetime.utcnow().isoformat()}
+
+
+def _build_cache_from_env() -> Union[RedisCacheService, DummyRedisCacheService]:
+    """Create cache using REDIS_URL/REDIS_HOST env vars, else fallback to dummy."""
+    enabled = os.getenv("REDIS_ENABLED")
+    url = os.getenv("REDIS_URL")
+    host = os.getenv("REDIS_HOST")
+    port = int(os.getenv("REDIS_PORT", "6379"))
+    db = int(os.getenv("REDIS_DB", "0"))
+
+    # If explicit disable or no config present, return dummy
+    if (enabled and enabled.lower() in ("0", "false", "no")) or (not url and not host):
+        logger.warning("Redis disabled or not configured; using no-op cache")
+        return DummyRedisCacheService()
+
+    try:
+        if url:
+            return RedisCacheService(url=url)
+        return RedisCacheService(host=host or "localhost", port=port, db=db)
+    except Exception as e:
+        logger.warning(f"Redis unavailable ({e}); using no-op cache")
+        return DummyRedisCacheService()
+
+
+# Global Redis cache instance (graceful fallback)
+redis_cache = _build_cache_from_env()

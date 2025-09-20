@@ -251,7 +251,19 @@
 
     <script>
         // Configuration
-        const API_URL = 'http://localhost:8000';
+        // Dynamic API base URL resolution
+        (function() {
+            const DEFAULT_API_URL = 'http://localhost:8000';
+            const params = new URLSearchParams(window.location.search);
+            const urlOverride = params.get('api');
+            const stored = localStorage.getItem('API_URL');
+            const resolved = (urlOverride || stored || DEFAULT_API_URL).replace(/\/$/, '');
+            if (urlOverride) {
+                try { localStorage.setItem('API_URL', resolved); } catch (e) {}
+            }
+            window.API_URL = resolved;
+        })();
+        const API_URL = window.API_URL;
         const SESSION_ID = generateSessionId();
         
         // Fixed conversation persistence

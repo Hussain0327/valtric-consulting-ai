@@ -4,12 +4,16 @@ Dual Supabase Client Manager for ValtricAI Consulting Agent
 Manages connections to:
 1. Global RAG - Consulting frameworks, templates, industry data (read-only)
 2. Tenant RAG - Client data, sessions, user management (RLS protected)
+
+OFFLINE_MODE support: when env OFFLINE_MODE=true, search methods return
+simulated results for local testing without external services.
 """
 
 import logging
 from typing import Optional, Dict, Any, List
 from supabase import create_client, Client
 from supabase.lib.client_options import ClientOptions
+import os
 
 from config.settings import (
     settings, 
@@ -101,6 +105,13 @@ class SupabaseClientManager:
     
     def search_global_chunks(self, query_vector: List[float], k: int = 8, query_text: str = "") -> List[Dict[str, Any]]:
         """Search Global RAG for consulting frameworks using documents table"""
+        if os.getenv("OFFLINE_MODE", "false").lower() == "true":
+            items = [
+                {"id": "g1", "text": "SWOT Analysis overview and usage.", "similarity": 0.91, "metadata": {}, "source_type": "global", "source_label": "[Frameworks]"},
+                {"id": "g2", "text": "Porter's Five Forces explained with examples.", "similarity": 0.88, "metadata": {}, "source_type": "global", "source_label": "[Frameworks]"},
+                {"id": "g3", "text": "McKinsey 7S organizational effectiveness model.", "similarity": 0.86, "metadata": {}, "source_type": "global", "source_label": "[Frameworks]"},
+            ]
+            return items[:k]
         try:
             # Use admin client for Global RAG (read-only, no user context needed)
             # For SWOT queries, search for SWOT keyword
@@ -164,6 +175,11 @@ class SupabaseClientManager:
         k: int = 8
     ) -> List[Dict[str, Any]]:
         """Search Tenant RAG for client-specific data"""
+        if os.getenv("OFFLINE_MODE", "false").lower() == "true":
+            return [
+                {"id": "t1", "text": "Client revenue by quarter (simulated).", "similarity": 0.77, "source_type": "tenant", "source_label": "[Client]"},
+                {"id": "t2", "text": "Notes from client kickoff meeting.", "similarity": 0.72, "source_type": "tenant", "source_label": "[Client]"},
+            ][:k]
         try:
             result = self.tenant_client.rpc(
                 "search_project_chunks_arr",
@@ -195,6 +211,9 @@ class SupabaseClientManager:
         k: int = 10
     ) -> List[Dict[str, Any]]:
         """Perform hybrid search across both RAGs with result fusion"""
+        if os.getenv("OFFLINE_MODE", "false").lower() == "true":
+            return (self.search_global_chunks(query_vector, k // 2) +
+                    self.search_tenant_chunks(query_vector, project_id, k - k // 2))[:k]
         
         if settings.rag_mode == RAGMode.GLOBAL:
             return self.search_global_chunks(query_vector, k)
@@ -260,6 +279,8 @@ class SupabaseClientManager:
     
     def health_check(self) -> Dict[str, bool]:
         """Check connectivity to both Supabase instances"""
+        if os.getenv("OFFLINE_MODE", "false").lower() == "true":
+            return {"global_rag": True, "tenant_rag": True}
         health = {
             "global_rag": False,
             "tenant_rag": False

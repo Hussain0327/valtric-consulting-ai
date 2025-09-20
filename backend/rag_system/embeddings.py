@@ -1,8 +1,11 @@
 """
 OpenAI Embeddings Service for ValtricAI Consulting Agent
 
-Handles text embedding generation for both Global and Tenant RAGs using OpenAI's 
+Handles text embedding generation for both Global and Tenant RAGs using OpenAI's
 text-embedding-3-small model.
+
+OFFLINE_MODE support:
+- When env OFFLINE_MODE=true, returns deterministic dummy vectors.
 """
 
 import logging
@@ -10,6 +13,7 @@ import openai
 from typing import List, Union, Optional
 import numpy as np
 from tenacity import retry, stop_after_attempt, wait_exponential
+import os
 
 from config.settings import settings, get_openai_config
 
@@ -41,6 +45,9 @@ class EmbeddingService:
         Returns:
             List of float values representing the embedding
         """
+        if os.getenv("OFFLINE_MODE", "false").lower() == "true":
+            # Deterministic short vector
+            return [0.01] * self.dimensions
         try:
             # Clean and truncate text if needed
             cleaned_text = self._clean_text(text)
@@ -73,6 +80,8 @@ class EmbeddingService:
         Returns:
             List of embeddings (each embedding is a list of floats)
         """
+        if os.getenv("OFFLINE_MODE", "false").lower() == "true":
+            return [[0.01] * self.dimensions for _ in (texts or [])]
         try:
             if not texts:
                 return []
