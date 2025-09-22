@@ -159,6 +159,7 @@ test_*.py
 debug_*.py
 quick_test.py
 simple_test.py
+!backend/test_chat_endpoint.py
 
 # Allow committed backend tests to run in CI
 !backend/tests/**/test_*.py
