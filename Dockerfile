@@ -27,6 +27,9 @@ ENV PYTHONPATH=/app
 # Enable the unauth test endpoint for the demo UI
 ENV ENABLE_TEST_CHAT=true
 
+# Run critical unit tests during the build to catch regressions early
+RUN pytest backend/tests/unit/test_startup.py
+
 EXPOSE 8000
 
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
