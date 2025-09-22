@@ -3,11 +3,13 @@ Rate Limiting Middleware for ValtricAI Consulting Agent
 Production-ready rate limiting with monitoring integration
 """
 
+import asyncio
+import contextlib
 import logging
 import time
-import asyncio
 from collections import defaultdict
 from typing import Optional
+
 from fastapi import Request, Response, HTTPException, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -17,41 +19,64 @@ logger = logging.getLogger(__name__)
 
 class RateLimitingMiddleware(BaseHTTPMiddleware):
     """Production-ready rate limiting middleware with monitoring integration"""
-    
+
     def __init__(self, app, requests_per_minute: int = 60):
         super().__init__(app)
         self.requests_per_minute = requests_per_minute
         self.requests = defaultdict(list)
+        self.cleanup_task: Optional[asyncio.Task] = None
+
+        # Register startup/shutdown hooks so the cleanup task is created when the
+        # event loop is running and torn down gracefully when the application
+        # stops.
+        app.add_event_handler("startup", self.start_cleanup_task)
+        app.add_event_handler("shutdown", self.stop_cleanup_task)
+
+    async def start_cleanup_task(self) -> None:
+        """Schedule the periodic cleanup coroutine once the app has started."""
+        if self.cleanup_task and not self.cleanup_task.done():
+            return
+
+        loop = asyncio.get_running_loop()
+        self.cleanup_task = loop.create_task(self._cleanup_old_requests())
+        logger.debug("Rate limit cleanup task scheduled")
+
+    async def stop_cleanup_task(self) -> None:
+        """Cancel the cleanup coroutine during application shutdown."""
+        if not self.cleanup_task:
+            return
+
+        self.cleanup_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self.cleanup_task
         self.cleanup_task = None
-        self._start_cleanup_task()
-    
-    def _start_cleanup_task(self):
-        """Start background task for cleaning up old requests"""
-        async def cleanup_old_requests():
-            while True:
-                try:
-                    await asyncio.sleep(30)  # Cleanup every 30 seconds
-                    current_time = time.time()
-                    
-                    # Clean up old requests for all IPs
-                    for ip in list(self.requests.keys()):
-                        self.requests[ip] = [
-                            req_time for req_time in self.requests[ip]
-                            if current_time - req_time < 60
-                        ]
-                        
-                        # Remove empty entries
-                        if not self.requests[ip]:
-                            del self.requests[ip]
-                            
-                    logger.debug(f"Rate limit cleanup: {len(self.requests)} active IPs")
-                    
-                except Exception as e:
-                    logger.error(f"Rate limit cleanup failed: {e}")
-        
-        # Start the cleanup task
-        self.cleanup_task = asyncio.create_task(cleanup_old_requests())
-    
+        logger.debug("Rate limit cleanup task cancelled")
+
+    async def _cleanup_old_requests(self) -> None:
+        """Background task for periodically removing stale request records."""
+        while True:
+            try:
+                await asyncio.sleep(30)  # Cleanup every 30 seconds
+                current_time = time.time()
+
+                # Clean up old requests for all IPs
+                for ip in list(self.requests.keys()):
+                    self.requests[ip] = [
+                        req_time for req_time in self.requests[ip]
+                        if current_time - req_time < 60
+                    ]
+
+                    # Remove empty entries
+                    if not self.requests[ip]:
+                        del self.requests[ip]
+
+                logger.debug("Rate limit cleanup: %s active IPs", len(self.requests))
+            except asyncio.CancelledError:
+                logger.debug("Rate limit cleanup task received cancellation")
+                raise
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.error("Rate limit cleanup failed: %s", exc, exc_info=True)
+
     def _get_client_ip(self, request: Request) -> str:
         """Extract client IP with proper proxy header handling"""
         
