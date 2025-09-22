@@ -160,6 +160,9 @@ debug_*.py
 quick_test.py
 simple_test.py
 
+# Allow committed backend tests to run in CI
+!backend/tests/**/test_*.py
+
 # SQL temp files
 *.sql.backup
 check_*.sql
